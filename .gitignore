@@ -1,2 +1,6 @@
 .build
+.DS_Store
 *.DS_Store
+Pixy.app
+AppIcon.icns
+AppIcon.iconset
