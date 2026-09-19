@@ -9,14 +9,14 @@ public struct CanvasView: View {
     @State private var dragCurrentPoint: (x: Int, y: Int)? = nil
     @State private var lastDrawnPoint: (x: Int, y: Int)? = nil
     @State private var zoomScale: CGFloat = 1.0
-    @State private var showGridLines: Bool = true
+    @State private var pinchBaseScale: CGFloat = 1.0
     
     public init(canvas: CanvasModel, palette: PaletteModel) {
         self.canvas = canvas
         self.palette = palette
     }
     
-    // Calculates optimal cell size for display based on canvas size
+    // Calculates base cell size for display based on canvas size
     private var baseCellSize: CGFloat {
         let maxDimension = max(canvas.width, canvas.height)
         if maxDimension <= 16 { return 32 }
@@ -40,7 +40,7 @@ public struct CanvasView: View {
     
     public var body: some View {
         VStack(spacing: 0) {
-            // Top Canvas Toolbar for Zoom & Grid toggle
+            // Top Canvas Toolbar for Zoom
             HStack {
                 Text("\(canvas.width) × \(canvas.height) px")
                     .font(.caption)
@@ -48,11 +48,7 @@ public struct CanvasView: View {
                 
                 Spacer()
                 
-                Toggle("Grid", isOn: $showGridLines)
-                    .toggleStyle(.checkbox)
-                    .font(.caption)
-                
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     Button(action: { zoomScale = max(0.25, zoomScale - 0.25) }) {
                         Image(systemName: "minus.magnifyingglass")
                     }
@@ -80,13 +76,13 @@ public struct CanvasView: View {
             
             Divider()
             
-            // Canvas View Area
+            // Canvas View Area with trackpad pinch gesture
             ScrollView([.horizontal, .vertical], showsIndicators: true) {
                 ZStack {
                     // Transparent checkerboard background
                     CheckerboardView(width: canvas.width, height: canvas.height, cellSize: cellSize)
                     
-                    // SwiftUI Canvas for rendering cells & preview
+                    // SwiftUI Canvas for rendering cells & line preview
                     Canvas { context, size in
                         let activeColor = PaletteModel.hexToColor(palette.selectedHex)
                         
@@ -124,22 +120,6 @@ public struct CanvasView: View {
                                 }
                             }
                         }
-                        
-                        // 3. Optional Grid lines
-                        if showGridLines && cellSize >= 4 {
-                            var gridPath = Path()
-                            for x in 0...canvas.width {
-                                let posX = CGFloat(x) * cellSize
-                                gridPath.move(to: CGPoint(x: posX, y: 0))
-                                gridPath.addLine(to: CGPoint(x: posX, y: canvasPixelHeight))
-                            }
-                            for y in 0...canvas.height {
-                                let posY = CGFloat(y) * cellSize
-                                gridPath.move(to: CGPoint(x: 0, y: posY))
-                                gridPath.addLine(to: CGPoint(x: canvasPixelWidth, y: posY))
-                            }
-                            context.stroke(gridPath, with: .color(Color.gray.opacity(0.3)), lineWidth: 0.5)
-                        }
                     }
                     .frame(width: canvasPixelWidth, height: canvasPixelHeight)
                 }
@@ -152,6 +132,17 @@ public struct CanvasView: View {
                         }
                         .onEnded { value in
                             handleGestureEnded(location: value.location)
+                        }
+                )
+                // Trackpad pinch-to-zoom gesture
+                .simultaneousGesture(
+                    MagnificationGesture()
+                        .onChanged { value in
+                            let newScale = pinchBaseScale * value
+                            zoomScale = min(max(0.25, newScale), 5.0)
+                        }
+                        .onEnded { value in
+                            pinchBaseScale = zoomScale
                         }
                 )
                 .padding(40)
@@ -174,13 +165,11 @@ public struct CanvasView: View {
         switch canvas.currentTool {
         case .draw:
             if dragStartPoint == nil {
-                // Drag start
                 dragStartPoint = pt
                 canvas.recordStateForUndo()
                 canvas.setPixel(x: pt.x, y: pt.y, colorHex: palette.selectedHex)
                 lastDrawnPoint = pt
             } else if lastDrawnPoint?.x != pt.x || lastDrawnPoint?.y != pt.y {
-                // Interpolate line between last drawn point and current to prevent missed pixels during fast drag
                 if let last = lastDrawnPoint {
                     let pts = bresenhamPoints(from: last, to: pt)
                     for point in pts {
@@ -199,7 +188,6 @@ public struct CanvasView: View {
             dragCurrentPoint = pt
             
         case .fill:
-            // Handled on tap / gesture start or end
             break
         }
     }

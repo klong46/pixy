@@ -62,7 +62,7 @@ func runVerification() {
     let jsonData = StorageManager.shared.exportJSON(canvas: canvas5)
     assert(jsonData != nil, "JSON export data should be generated")
     let jsonStr = String(data: jsonData!, encoding: .utf8)!
-    assert(jsonStr.contains("\"width\" : 4"), "JSON contains width")
+    assert(jsonStr.contains("\"width\": 4"), "JSON contains width")
     assert(jsonStr.contains("\"palette\""), "JSON contains palette map")
     assert(jsonStr.contains("\"grid\""), "JSON contains grid matrix")
     print("✓ Export JSON (maps color to number & hex code): PASSED")

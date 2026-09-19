@@ -22,13 +22,6 @@ public struct SavedCanvasData: Codable, Identifiable {
     }
 }
 
-public struct JSONExportFormat: Codable {
-    public var width: Int
-    public var height: Int
-    public var palette: [String: String] // maps number index (e.g. "0", "1") to hex string
-    public var grid: [[Int]]            // 2D matrix mapping each cell to a palette number index
-}
-
 public class StorageManager {
     public static let shared = StorageManager()
     
@@ -126,16 +119,14 @@ public class StorageManager {
     // MARK: - Exporting (PNG, JPG, JSON)
     
     public func exportJSON(canvas: CanvasModel) -> Data? {
-        // Collect all distinct hex colors present in grid plus palette order
         var colorMap: [String: Int] = [:]
         var paletteDict: [String: String] = [:]
         
-        // Number 0 is transparent/empty
+        // 0 index is transparent / empty
         paletteDict["0"] = "#00000000"
         colorMap[""] = 0
         
         var nextIndex = 1
-        
         for row in canvas.grid {
             for hex in row {
                 if !hex.isEmpty && colorMap[hex] == nil {
@@ -146,22 +137,38 @@ public class StorageManager {
             }
         }
         
-        var gridMatrix: [[Int]] = []
-        for row in canvas.grid {
-            let rowIndices = row.map { colorMap[$0] ?? 0 }
-            gridMatrix.append(rowIndices)
+        let sortedKeys = paletteDict.keys.compactMap { Int($0) }.sorted()
+        var paletteJSONLines: [String] = []
+        for key in sortedKeys {
+            let strKey = "\(key)"
+            if let hex = paletteDict[strKey] {
+                paletteJSONLines.append("    \"\(strKey)\": \"\(hex)\"")
+            }
         }
+        let paletteStr = paletteJSONLines.joined(separator: ",\n")
         
-        let jsonObject = JSONExportFormat(
-            width: canvas.width,
-            height: canvas.height,
-            palette: paletteDict,
-            grid: gridMatrix
-        )
+        var gridJSONLines: [String] = []
+        for row in canvas.grid {
+            let rowIndices = row.map { "\(colorMap[$0] ?? 0)" }
+            let rowStr = "    [" + rowIndices.joined(separator: ", ") + "]"
+            gridJSONLines.append(rowStr)
+        }
+        let gridStr = gridJSONLines.joined(separator: ",\n")
         
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try? encoder.encode(jsonObject)
+        let jsonString = """
+        {
+          "width": \(canvas.width),
+          "height": \(canvas.height),
+          "palette": {
+        \(paletteStr)
+          },
+          "grid": [
+        \(gridStr)
+          ]
+        }
+        """
+        
+        return jsonString.data(using: .utf8)
     }
     
     public func renderNSImage(canvas: CanvasModel, scale: Int = 16, isOpaque: Bool = false) -> NSImage? {
@@ -201,7 +208,6 @@ public class StorageManager {
                 if !hex.isEmpty {
                     let nsColor = NSColor(PaletteModel.hexToColor(hex))
                     cgContext?.setFillColor(nsColor.cgColor)
-                    // CoreGraphics Y-origin is bottom-left, canvas.grid[0] is top row
                     let flippedY = (canvas.height - 1 - y) * scale
                     cgContext?.fill(CGRect(x: x * scale, y: flippedY, width: scale, height: scale))
                 }

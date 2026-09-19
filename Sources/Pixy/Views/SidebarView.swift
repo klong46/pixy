@@ -5,43 +5,24 @@ public struct SidebarView: View {
     @ObservedObject var canvas: CanvasModel
     @ObservedObject var palette: PaletteModel
     
-    let onNewCanvas: () -> Void
-    let onOpenCanvas: () -> Void
-    let onSaveCanvas: () -> Void
-    let onExportCanvas: (ExportFormat) -> Void
-    
-    public enum ExportFormat: String, CaseIterable, Identifiable {
-        case png = "PNG Image (.png)"
-        case jpg = "JPG Image (.jpg)"
-        case json = "JSON File (.json)"
-        
-        public var id: String { rawValue }
-    }
-    
     @State private var colorToEditIndex: Int? = nil
-    @State private var newColorPicker: Color = .black
     @State private var editColorPicker: Color = .black
     @State private var isEditingColorPresented: Bool = false
     
+    @State private var newColorPicker: Color = .red
+    @State private var isAddColorPresented: Bool = false
+    
     public init(
         canvas: CanvasModel,
-        palette: PaletteModel,
-        onNewCanvas: @escaping () -> Void,
-        onOpenCanvas: @escaping () -> Void,
-        onSaveCanvas: @escaping () -> Void,
-        onExportCanvas: @escaping (ExportFormat) -> Void
+        palette: PaletteModel
     ) {
         self.canvas = canvas
         self.palette = palette
-        self.onNewCanvas = onNewCanvas
-        self.onOpenCanvas = onOpenCanvas
-        self.onSaveCanvas = onSaveCanvas
-        self.onExportCanvas = onExportCanvas
     }
     
     public var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // App Title & Header
+            // App Header
             HStack(spacing: 8) {
                 Image(systemName: "paintpalette.fill")
                     .font(.title2)
@@ -55,55 +36,7 @@ public struct SidebarView: View {
             
             Divider()
             
-            // 1. App Settings Section (Top of UI Panel)
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("App Settings")
-                        .font(.caption.bold())
-                        .foregroundColor(.secondary)
-                    Spacer()
-                    if canvas.isModified {
-                        Text("Unsaved")
-                            .font(.caption2)
-                            .foregroundColor(.orange)
-                    }
-                }
-                
-                VStack(spacing: 6) {
-                    Button(action: onSaveCanvas) {
-                        Label("Save Canvas", systemImage: "square.and.arrow.down")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .buttonStyle(.bordered)
-                    
-                    Button(action: onOpenCanvas) {
-                        Label("Open Canvas...", systemImage: "folder")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .buttonStyle(.bordered)
-                    
-                    Menu {
-                        Button("PNG Image (.png)") { onExportCanvas(.png) }
-                        Button("JPG Image (.jpg)") { onExportCanvas(.jpg) }
-                        Button("JSON Data (.json)") { onExportCanvas(.json) }
-                    } label: {
-                        Label("Export Canvas", systemImage: "square.and.arrow.up")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .menuStyle(.borderedButton)
-                    
-                    Button(action: onNewCanvas) {
-                        Label("New Canvas...", systemImage: "plus.app")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
-            .padding(.horizontal, 12)
-            
-            Divider()
-            
-            // 2. Tools Section
+            // 1. Tools Section
             VStack(alignment: .leading, spacing: 8) {
                 Text("Tools")
                     .font(.caption.bold())
@@ -111,6 +44,15 @@ public struct SidebarView: View {
                 
                 VStack(spacing: 4) {
                     ForEach(ToolType.allCases) { tool in
+                        let isSelected = canvas.currentTool == tool
+                        let shortcutKey: String = {
+                            switch tool {
+                            case .draw: return "Q"
+                            case .line: return "W"
+                            case .fill: return "E"
+                            }
+                        }()
+                        
                         Button(action: {
                             canvas.currentTool = tool
                         }) {
@@ -119,14 +61,23 @@ public struct SidebarView: View {
                                     .frame(width: 20)
                                 Text(tool.rawValue)
                                 Spacer()
+                                Text(shortcutKey)
+                                    .font(.caption2.bold())
+                                    .foregroundColor(isSelected ? .accentColor : .secondary)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.secondary.opacity(0.12))
+                                    .cornerRadius(4)
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 6)
-                            .background(canvas.currentTool == tool ? Color.accentColor.opacity(0.15) : Color.clear)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
+                            .contentShape(Rectangle())
                             .cornerRadius(6)
                         }
                         .buttonStyle(.plain)
-                        .foregroundColor(canvas.currentTool == tool ? .accentColor : .primary)
+                        .foregroundColor(isSelected ? .accentColor : .primary)
                     }
                 }
             }
@@ -134,7 +85,7 @@ public struct SidebarView: View {
             
             Divider()
             
-            // 3. Color Palette Section
+            // 2. Color Palette Section
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("Color Palette")
@@ -146,7 +97,7 @@ public struct SidebarView: View {
                         .foregroundColor(.secondary)
                 }
                 
-                // Palette Grid (Up to 10 colors)
+                // Palette Grid (Up to 10 colors + Add Color Square Button)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 36), spacing: 8)], spacing: 8) {
                     ForEach(Array(palette.colors.enumerated()), id: \.element.id) { index, colorItem in
                         let color = PaletteModel.hexToColor(colorItem.hex)
@@ -187,34 +138,37 @@ public struct SidebarView: View {
                             }
                         }
                     }
-                }
-                
-                // Add Color Section
-                if palette.canAddColor {
-                    HStack {
-                        ColorPicker("", selection: $newColorPicker, supportsOpacity: true)
-                            .labelsHidden()
-                            .frame(width: 28, height: 28)
-                        
+                    
+                    // Add Color Button: Square shape (36x36) with + in center
+                    if palette.canAddColor {
                         Button(action: {
-                            let hex = PaletteModel.colorToHex(newColorPicker)
-                            palette.addColor(hex: hex)
+                            isAddColorPresented = true
                         }) {
-                            Label("Add Color", systemImage: "plus")
-                                .font(.caption)
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .strokeBorder(Color.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1.5, dash: [4]))
+                                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.08)))
+                                    .frame(width: 36, height: 36)
+                                
+                                Image(systemName: "plus")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(.primary)
+                            }
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
+                        .buttonStyle(.plain)
+                        .help("Add new color to palette")
                     }
-                    .padding(.top, 4)
                 }
             }
             .padding(.horizontal, 12)
             
             Spacer()
             
-            // Bottom Info: Keyboard Shortcuts helper
-            VStack(alignment: .leading, spacing: 2) {
+            // Bottom Info: Shortcuts helper
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Tools: Q (Draw) | W (Line) | E (Fill)")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
                 Text("Undo: ⌘Z  |  Redo: ⌘Y / ⌘⇧Z")
                     .font(.caption2)
                     .foregroundColor(.secondary)
@@ -222,9 +176,12 @@ public struct SidebarView: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 12)
         }
-        .frame(width: 220)
+        .frame(width: 200)
         .background(Color(NSColor.windowBackgroundColor))
-        .sheet(isPresented: $isEditingColorPresented) {
+        // Sheet for editing existing color
+        .sheet(isPresented: $isEditingColorPresented, onDismiss: {
+            NSColorPanel.shared.orderOut(nil)
+        }) {
             VStack(spacing: 16) {
                 Text("Change Color")
                     .font(.headline)
@@ -236,6 +193,7 @@ public struct SidebarView: View {
                 
                 HStack(spacing: 16) {
                     Button("Cancel") {
+                        dismissColorPanel()
                         isEditingColorPresented = false
                     }
                     
@@ -244,6 +202,7 @@ public struct SidebarView: View {
                             let hex = PaletteModel.colorToHex(editColorPicker)
                             palette.updateColor(at: index, hex: hex)
                         }
+                        dismissColorPanel()
                         isEditingColorPresented = false
                     }
                     .buttonStyle(.borderedProminent)
@@ -252,5 +211,41 @@ public struct SidebarView: View {
             .padding()
             .frame(width: 240, height: 160)
         }
+        // Sheet for adding new color
+        .sheet(isPresented: $isAddColorPresented, onDismiss: {
+            NSColorPanel.shared.orderOut(nil)
+        }) {
+            VStack(spacing: 16) {
+                Text("Add Palette Color")
+                    .font(.headline)
+                
+                ColorPicker("Choose Color:", selection: $newColorPicker, supportsOpacity: true)
+                    .labelsHidden()
+                    .scaleEffect(1.2)
+                    .padding()
+                
+                HStack(spacing: 16) {
+                    Button("Cancel") {
+                        dismissColorPanel()
+                        isAddColorPresented = false
+                    }
+                    
+                    Button("Add to Palette") {
+                        let hex = PaletteModel.colorToHex(newColorPicker)
+                        palette.addColor(hex: hex)
+                        dismissColorPanel()
+                        isAddColorPresented = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding()
+            .frame(width: 240, height: 160)
+        }
+    }
+    
+    private func dismissColorPanel() {
+        NSColorPanel.shared.orderOut(nil)
+        NSColorPanel.shared.close()
     }
 }

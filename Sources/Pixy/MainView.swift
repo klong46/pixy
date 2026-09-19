@@ -1,6 +1,14 @@
 import SwiftUI
 import AppKit
 
+public enum ExportFormat: String, CaseIterable, Identifiable {
+    case png = "PNG Image (.png)"
+    case jpg = "JPG Image (.jpg)"
+    case json = "JSON Data (.json)"
+    
+    public var id: String { rawValue }
+}
+
 public struct MainView: View {
     @StateObject private var canvas = CanvasModel()
     @StateObject private var palette = PaletteModel()
@@ -21,19 +29,10 @@ public struct MainView: View {
     
     public var body: some View {
         HStack(spacing: 0) {
-            // Left UI Panel
+            // Left UI Panel (Tools & Palette)
             SidebarView(
                 canvas: canvas,
-                palette: palette,
-                onNewCanvas: {
-                    checkUnsavedAndProceed(action: .createNew(title: "Untitled", width: 32, height: 32))
-                },
-                onOpenCanvas: {
-                    savedCanvasesList = StorageManager.shared.listSavedCanvases()
-                    isOpenCanvasSheetPresented = true
-                },
-                onSaveCanvas: performSaveCanvas,
-                onExportCanvas: performExportCanvas
+                palette: palette
             )
             
             Divider()
@@ -41,21 +40,66 @@ public struct MainView: View {
             // Central Canvas Area
             CanvasView(canvas: canvas, palette: palette)
         }
-        .frame(minWidth: 800, minHeight: 600)
+        .frame(minWidth: 850, minHeight: 600)
         .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Text(canvas.title)
-                    .font(.headline)
+            // 1. Left Canvas Settings Actions (New, Open, Save, Export) with labels displayed always
+            ToolbarItemGroup(placement: .navigation) {
+                Button(action: {
+                    checkUnsavedAndProceed(action: .createNew(title: "Untitled", width: 32, height: 32))
+                }) {
+                    Label("New", systemImage: "plus.app")
+                }
+                .labelStyle(.titleAndIcon)
+                .help("Create a new canvas")
+                
+                Button(action: {
+                    savedCanvasesList = StorageManager.shared.listSavedCanvases()
+                    isOpenCanvasSheetPresented = true
+                }) {
+                    Label("Open", systemImage: "folder")
+                }
+                .labelStyle(.titleAndIcon)
+                .help("Open a saved canvas")
+                
+                Button(action: performSaveCanvas) {
+                    Label("Save", systemImage: "square.and.arrow.down")
+                }
+                .labelStyle(.titleAndIcon)
+                .help("Save canvas in app")
+                
+                Menu {
+                    Button("PNG Image (.png)") { performExportCanvas(format: .png) }
+                    Button("JPG Image (.jpg)") { performExportCanvas(format: .jpg) }
+                    Button("JSON Data (.json)") { performExportCanvas(format: .json) }
+                } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
+                .labelStyle(.titleAndIcon)
+                .help("Export canvas as PNG, JPG, or JSON")
+            }
+            
+            // 2. Title & Unsaved Status Badge in the Center of the Mac Window Toolbar
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 6) {
+                    Text(canvas.title)
+                        .font(.headline)
+                    if canvas.isModified {
+                        Text("• Unsaved")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                }
             }
         }
         .onAppear {
             restoreLastSessionOrDefaults()
         }
-        // Keyboard shortcuts for Undo and Redo
+        // Keyboard shortcuts for Undo, Redo, and Tool hotkeys (Q, W, E)
         .background(
-            UndoRedoHandlerView(
+            KeyShortcutHandlerView(
                 onUndo: { canvas.undo() },
-                onRedo: { canvas.redo() }
+                onRedo: { canvas.redo() },
+                onSelectTool: { tool in canvas.currentTool = tool }
             )
         )
         // Dialog sheets
@@ -149,7 +193,7 @@ public struct MainView: View {
         }
     }
     
-    private func performExportCanvas(format: SidebarView.ExportFormat) {
+    private func performExportCanvas(format: ExportFormat) {
         let savePanel = NSSavePanel()
         savePanel.canCreateDirectories = true
         savePanel.nameFieldStringValue = "\(canvas.title.lowercased().replacingOccurrences(of: " ", with: "_"))"
@@ -183,26 +227,30 @@ public struct MainView: View {
     }
 }
 
-// Invisible NSView subclass to capture ⌘Z (Undo) and ⌘Y / ⌘⇧Z (Redo) reliably
-struct UndoRedoHandlerView: NSViewRepresentable {
+// Invisible NSView subclass to capture ⌘Z (Undo), ⌘Y / ⌘⇧Z (Redo), and tool hotkeys Q (Draw), W (Line), E (Fill)
+struct KeyShortcutHandlerView: NSViewRepresentable {
     let onUndo: () -> Void
     let onRedo: () -> Void
+    let onSelectTool: (ToolType) -> Void
     
     func makeNSView(context: Context) -> KeyView {
         let view = KeyView()
         view.onUndo = onUndo
         view.onRedo = onRedo
+        view.onSelectTool = onSelectTool
         return view
     }
     
     func updateNSView(_ nsView: KeyView, context: Context) {
         nsView.onUndo = onUndo
         nsView.onRedo = onRedo
+        nsView.onSelectTool = onSelectTool
     }
     
     class KeyView: NSView {
         var onUndo: (() -> Void)?
         var onRedo: (() -> Void)?
+        var onSelectTool: ((ToolType) -> Void)?
         
         override var acceptsFirstResponder: Bool { true }
         
@@ -226,6 +274,21 @@ struct UndoRedoHandlerView: NSViewRepresentable {
                 } else if characters == "y" {
                     onRedo?()
                     return
+                }
+            } else if flags.isEmpty || flags == .capsLock {
+                // Hotkeys without modifier key: Q, W, E
+                switch characters {
+                case "q":
+                    onSelectTool?(.draw)
+                    return
+                case "w":
+                    onSelectTool?(.line)
+                    return
+                case "e":
+                    onSelectTool?(.fill)
+                    return
+                default:
+                    break
                 }
             }
             super.keyDown(with: event)
