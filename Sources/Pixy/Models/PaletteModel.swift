@@ -3,7 +3,7 @@ import SwiftUI
 
 public struct PaletteColor: Identifiable, Equatable, Codable {
     public var id = UUID()
-    public var hex: String
+    public var hex: String // "" represents Clear / Erase
     
     public init(id: UUID = UUID(), hex: String) {
         self.id = id
@@ -13,16 +13,24 @@ public struct PaletteColor: Identifiable, Equatable, Codable {
 
 public class PaletteModel: ObservableObject {
     @Published public var colors: [PaletteColor] = []
-    @Published public var selectedIndex: Int = 0
+    @Published public var selectedIndex: Int = 1 // Default to first color after Clear
     
-    public static let maxColors = 10
+    // Max customizable user colors (excluding locked Clear tile at index 0)
+    public static let maxUserColors = 10
     
     public init(initialColors: [String]? = nil) {
-        if let initial = initialColors, !initial.isEmpty {
-            self.colors = initial.prefix(Self.maxColors).map { PaletteColor(hex: $0) }
-        } else {
-            // Default starter palette (8 classic pixel art colors)
-            let defaults = [
+        setColorsFromHexStrings(initialColors)
+    }
+    
+    public func setColorsFromHexStrings(_ hexStrings: [String]?) {
+        var userHexes: [String] = []
+        if let initial = hexStrings {
+            // Strip any existing "" at start to avoid duplicating Clear tile
+            userHexes = initial.filter { !$0.isEmpty }
+        }
+        
+        if userHexes.isEmpty {
+            userHexes = [
                 "#000000FF", // Black
                 "#FFFFFFFF", // White
                 "#FF3B30FF", // Red
@@ -32,22 +40,30 @@ public class PaletteModel: ObservableObject {
                 "#FF9500FF", // Orange
                 "#AF52DEFF"  // Purple
             ]
-            self.colors = defaults.map { PaletteColor(hex: $0) }
         }
-        if selectedIndex >= colors.count {
-            selectedIndex = 0
+        
+        var list: [PaletteColor] = [PaletteColor(hex: "")] // Index 0 is ALWAYS Clear
+        list.append(contentsOf: userHexes.prefix(Self.maxUserColors).map { PaletteColor(hex: $0) })
+        
+        self.colors = list
+        if selectedIndex >= colors.count || selectedIndex < 0 {
+            selectedIndex = min(1, colors.count - 1)
         }
     }
     
     public var selectedHex: String {
         guard selectedIndex >= 0 && selectedIndex < colors.count else {
-            return "#000000FF"
+            return ""
         }
         return colors[selectedIndex].hex
     }
     
+    public var userColorCount: Int {
+        max(0, colors.count - 1)
+    }
+    
     public var canAddColor: Bool {
-        colors.count < Self.maxColors
+        userColorCount < Self.maxUserColors
     }
     
     public func addColor(hex: String) {
@@ -57,15 +73,17 @@ public class PaletteModel: ObservableObject {
     }
     
     public func updateColor(at index: Int, hex: String) {
-        guard index >= 0 && index < colors.count else { return }
+        // Cannot modify Clear tile (index 0)
+        guard index > 0 && index < colors.count else { return }
         colors[index].hex = hex
     }
     
     public func removeColor(at index: Int) {
-        guard index >= 0 && index < colors.count else { return }
+        // Cannot delete Clear tile (index 0)
+        guard index > 0 && index < colors.count else { return }
         colors.remove(at: index)
         if selectedIndex >= colors.count {
-            selectedIndex = max(0, colors.count - 1)
+            selectedIndex = max(1, colors.count - 1)
         }
     }
     
@@ -80,6 +98,7 @@ public class PaletteModel: ObservableObject {
     }
     
     public static func hexToColor(_ hex: String) -> Color {
+        if hex.isEmpty { return .clear }
         var cleanHex = hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         if cleanHex.hasPrefix("#") {
             cleanHex.removeFirst()
@@ -98,6 +117,7 @@ public class PaletteModel: ObservableObject {
             g = Double((rgbValue & 0x00FF00) >> 8) / 255.0
             b = Double(rgbValue & 0x0000FF) / 255.0
         } else if cleanHex.count == 8 {
+            r = Double((rgbValue & 0xFF000000) >> 24) / 255.0
             r = Double((rgbValue & 0xFF000000) >> 24) / 255.0
             g = Double((rgbValue & 0x00FF0000) >> 16) / 255.0
             b = Double((rgbValue & 0x0000FF00) >> 8) / 255.0

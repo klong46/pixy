@@ -47,11 +47,11 @@ func runVerification() {
     
     // 5. Palette Max Colors & Switch Test
     let palette = PaletteModel()
-    assert(palette.colors.count <= 10, "Palette max 10 colors")
+    assert(palette.userColorCount <= 10, "Palette max 10 user colors")
     for i in 0..<15 {
         palette.addColor(hex: "#12345\(i)")
     }
-    assert(palette.colors.count == 10, "Palette capped strictly at 10 colors")
+    assert(palette.userColorCount == 10, "Palette capped strictly at 10 user colors")
     palette.selectedIndex = 3
     assert(palette.selectedIndex == 3, "Selecting palette color index: PASSED")
     print("✓ Palette management (up to 10 colors, picker, select, delete): PASSED")

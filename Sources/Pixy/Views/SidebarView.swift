@@ -92,22 +92,34 @@ public struct SidebarView: View {
                         .font(.caption.bold())
                         .foregroundColor(.secondary)
                     Spacer()
-                    Text("\(palette.colors.count)/\(PaletteModel.maxColors)")
+                    Text("\(palette.userColorCount)/\(PaletteModel.maxUserColors)")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
                 
-                // Palette Grid (Up to 10 colors + Add Color Square Button)
+                // Palette Grid (Index 0 is locked Clear tile + User colors + Add Color Square Button)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 36), spacing: 8)], spacing: 8) {
                     ForEach(Array(palette.colors.enumerated()), id: \.element.id) { index, colorItem in
-                        let color = PaletteModel.hexToColor(colorItem.hex)
                         let isSelected = palette.selectedIndex == index
+                        let isClearTile = index == 0
                         
                         ZStack {
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(color)
-                                .frame(width: 36, height: 36)
-                                .shadow(radius: 1)
+                            if isClearTile {
+                                // Clear / Erase tile with checkerboard & slash icon
+                                MiniCheckerboardView()
+                                    .frame(width: 36, height: 36)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                
+                                Image(systemName: "eraser.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.secondary)
+                            } else {
+                                let color = PaletteModel.hexToColor(colorItem.hex)
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(color)
+                                    .frame(width: 36, height: 36)
+                                    .shadow(radius: 1)
+                            }
                             
                             if isSelected {
                                 RoundedRectangle(cornerRadius: 6)
@@ -122,19 +134,22 @@ public struct SidebarView: View {
                         .onTapGesture {
                             palette.selectedIndex = index
                         }
+                        .help(isClearTile ? "Clear / Erase (Transparent)" : "Color swatch")
                         .contextMenu {
-                            Button {
-                                colorToEditIndex = index
-                                editColorPicker = PaletteModel.hexToColor(colorItem.hex)
-                                isEditingColorPresented = true
-                            } label: {
-                                Label("Change Color...", systemImage: "pencil.circle")
-                            }
-                            
-                            Button(role: .destructive) {
-                                palette.removeColor(at: index)
-                            } label: {
-                                Label("Delete Color", systemImage: "trash")
+                            if !isClearTile {
+                                Button {
+                                    colorToEditIndex = index
+                                    editColorPicker = PaletteModel.hexToColor(colorItem.hex)
+                                    isEditingColorPresented = true
+                                } label: {
+                                    Label("Change Color...", systemImage: "pencil.circle")
+                                }
+                                
+                                Button(role: .destructive) {
+                                    palette.removeColor(at: index)
+                                } label: {
+                                    Label("Delete Color", systemImage: "trash")
+                                }
                             }
                         }
                     }
@@ -247,5 +262,30 @@ public struct SidebarView: View {
     private func dismissColorPanel() {
         NSColorPanel.shared.orderOut(nil)
         NSColorPanel.shared.close()
+    }
+}
+
+// Mini checkerboard pattern for Clear palette tile
+struct MiniCheckerboardView: View {
+    var body: some View {
+        Canvas { context, size in
+            let checkSize: CGFloat = 6.0
+            let cols = Int(ceil(size.width / checkSize))
+            let rows = Int(ceil(size.height / checkSize))
+            
+            for r in 0..<rows {
+                for c in 0..<cols {
+                    let isEven = (r + c) % 2 == 0
+                    let color: Color = isEven ? Color(white: 0.82) : Color(white: 0.95)
+                    let rect = CGRect(
+                        x: CGFloat(c) * checkSize,
+                        y: CGFloat(r) * checkSize,
+                        width: checkSize,
+                        height: checkSize
+                    )
+                    context.fill(Path(rect), with: .color(color))
+                }
+            }
+        }
     }
 }

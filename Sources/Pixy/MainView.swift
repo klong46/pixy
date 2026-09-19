@@ -113,9 +113,7 @@ public struct MainView: View {
                     canvas.reset(width: savedCanvas.width, height: savedCanvas.height, title: savedCanvas.title)
                     canvas.id = savedCanvas.id
                     canvas.grid = savedCanvas.grid
-                    if !savedCanvas.palette.isEmpty {
-                        palette.colors = savedCanvas.palette.map { PaletteColor(hex: $0) }
-                    }
+                    palette.setColorsFromHexStrings(savedCanvas.palette)
                     autoSaveCurrentState()
                 },
                 onDeleteCanvas: { id in
@@ -136,9 +134,7 @@ public struct MainView: View {
             canvas.reset(width: session.width, height: session.height, title: session.title)
             canvas.id = session.id
             canvas.grid = session.grid
-            if !session.palette.isEmpty {
-                palette.colors = session.palette.map { PaletteColor(hex: $0) }
-            }
+            palette.setColorsFromHexStrings(session.palette)
         }
     }
     

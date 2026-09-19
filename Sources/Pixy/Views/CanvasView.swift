@@ -77,7 +77,7 @@ public struct CanvasView: View {
             
             Divider()
             
-            // Canvas View Area with trackpad pinch gesture
+            // Canvas View Area: Smooth ScrollView with slightly off-white background
             ScrollView([.horizontal, .vertical], showsIndicators: true) {
                 ZStack {
                     CheckerboardView(width: canvas.width, height: canvas.height, cellSize: cellSize)
@@ -113,7 +113,9 @@ public struct CanvasView: View {
                                         width: cellSize,
                                         height: cellSize
                                     )
-                                    context.fill(Path(rect), with: .color(activeColor.opacity(0.8)))
+                                    // If active hex is empty (Clear), show semi-transparent gray preview for erase
+                                    let previewColor = palette.selectedHex.isEmpty ? Color.gray.opacity(0.5) : activeColor.opacity(0.8)
+                                    context.fill(Path(rect), with: .color(previewColor))
                                 }
                             }
                         }
@@ -141,10 +143,11 @@ public struct CanvasView: View {
                             pinchBaseScale = zoomScale
                         }
                 )
-                .padding(40)
+                .padding(60)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(NSColor.controlBackgroundColor))
+            // Slightly off-white background behind the canvas
+            .background(Color(red: 0.95, green: 0.95, blue: 0.96))
         }
     }
     
