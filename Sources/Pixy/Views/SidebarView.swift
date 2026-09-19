@@ -22,20 +22,6 @@ public struct SidebarView: View {
     
     public var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // App Header
-            HStack(spacing: 8) {
-                Image(systemName: "paintpalette.fill")
-                    .font(.title2)
-                    .foregroundColor(.accentColor)
-                Text("Pixy")
-                    .font(.title2.bold())
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 12)
-            
-            Divider()
-            
             // 1. Tools Section
             VStack(alignment: .leading, spacing: 8) {
                 Text("Tools")
@@ -82,6 +68,7 @@ public struct SidebarView: View {
                 }
             }
             .padding(.horizontal, 12)
+            .padding(.top, 12)
             
             Divider()
             
@@ -178,18 +165,6 @@ public struct SidebarView: View {
             .padding(.horizontal, 12)
             
             Spacer()
-            
-            // Bottom Info: Shortcuts helper
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Tools: Q (Draw) | W (Line) | E (Fill)")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                Text("Undo: ⌘Z  |  Redo: ⌘Y / ⌘⇧Z")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 12)
         }
         .frame(width: 200)
         .background(Color(NSColor.windowBackgroundColor))
