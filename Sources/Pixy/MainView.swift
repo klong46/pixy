@@ -15,15 +15,6 @@ public struct MainView: View {
     
     @State private var isNewCanvasSheetPresented = false
     @State private var isOpenCanvasSheetPresented = false
-    @State private var isUnsavedPromptPresented = false
-    @State private var pendingAction: PendingAction? = nil
-    
-    @State private var savedCanvasesList: [SavedCanvasData] = []
-    
-    private enum PendingAction {
-        case createNew(title: String, width: Int, height: Int)
-        case loadSaved(SavedCanvasData)
-    }
     
     public init() {}
     
@@ -38,14 +29,20 @@ public struct MainView: View {
             Divider()
             
             // Central Canvas Area
-            CanvasView(canvas: canvas, palette: palette)
+            CanvasView(
+                canvas: canvas,
+                palette: palette,
+                onEditEnded: {
+                    autoSaveCurrentState()
+                }
+            )
         }
         .frame(minWidth: 850, minHeight: 600)
         .toolbar {
-            // 1. Left Canvas Settings Actions (New, Open, Save, Export) with labels displayed always
+            // Left Canvas Settings Actions (New, Open, Export) - Save is automated
             ToolbarItemGroup(placement: .navigation) {
                 Button(action: {
-                    checkUnsavedAndProceed(action: .createNew(title: "Untitled", width: 32, height: 32))
+                    isNewCanvasSheetPresented = true
                 }) {
                     Label("New", systemImage: "plus.app")
                 }
@@ -53,19 +50,12 @@ public struct MainView: View {
                 .help("Create a new canvas")
                 
                 Button(action: {
-                    savedCanvasesList = StorageManager.shared.listSavedCanvases()
                     isOpenCanvasSheetPresented = true
                 }) {
                     Label("Open", systemImage: "folder")
                 }
                 .labelStyle(.titleAndIcon)
                 .help("Open a saved canvas")
-                
-                Button(action: performSaveCanvas) {
-                    Label("Save", systemImage: "square.and.arrow.down")
-                }
-                .labelStyle(.titleAndIcon)
-                .help("Save canvas in app")
                 
                 Menu {
                     Button("PNG Image (.png)") { performExportCanvas(format: .png) }
@@ -78,27 +68,30 @@ public struct MainView: View {
                 .help("Export canvas as PNG, JPG, or JSON")
             }
             
-            // 2. Title & Unsaved Status Badge in the Center of the Mac Window Toolbar
+            // Title in the Center of the Mac Window Toolbar
             ToolbarItem(placement: .principal) {
-                HStack(spacing: 6) {
-                    Text(canvas.title)
-                        .font(.headline)
-                    if canvas.isModified {
-                        Text("• Unsaved")
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                    }
-                }
+                Text(canvas.title)
+                    .font(.headline)
             }
         }
         .onAppear {
             restoreLastSessionOrDefaults()
         }
+        // Auto-save whenever palette changes
+        .onChange(of: palette.colors) { _ in
+            autoSaveCurrentState()
+        }
         // Keyboard shortcuts for Undo, Redo, and Tool hotkeys (Q, W, E)
         .background(
             KeyShortcutHandlerView(
-                onUndo: { canvas.undo() },
-                onRedo: { canvas.redo() },
+                onUndo: {
+                    canvas.undo()
+                    autoSaveCurrentState()
+                },
+                onRedo: {
+                    canvas.redo()
+                    autoSaveCurrentState()
+                },
                 onSelectTool: { tool in canvas.currentTool = tool }
             )
         )
@@ -110,40 +103,33 @@ public struct MainView: View {
                 canvasTitle: .constant("Untitled"),
                 onConfirm: { title, width, height in
                     canvas.reset(width: width, height: height, title: title)
-                    StorageManager.shared.saveLastSession(canvas: canvas, palette: palette)
+                    autoSaveCurrentState()
                 }
             )
         }
         .sheet(isPresented: $isOpenCanvasSheetPresented) {
             OpenCanvasDialog(
-                savedCanvases: savedCanvasesList,
                 onSelectCanvas: { savedCanvas in
-                    checkUnsavedAndProceed(action: .loadSaved(savedCanvas))
+                    canvas.reset(width: savedCanvas.width, height: savedCanvas.height, title: savedCanvas.title)
+                    canvas.id = savedCanvas.id
+                    canvas.grid = savedCanvas.grid
+                    if !savedCanvas.palette.isEmpty {
+                        palette.colors = savedCanvas.palette.map { PaletteColor(hex: $0) }
+                    }
+                    autoSaveCurrentState()
                 },
                 onDeleteCanvas: { id in
                     StorageManager.shared.deleteSavedCanvas(id: id)
-                    savedCanvasesList = StorageManager.shared.listSavedCanvases()
                 }
             )
         }
-        // Unsaved changes alert modal
-        .alert("Unsaved Changes", isPresented: $isUnsavedPromptPresented) {
-            Button("Save and Continue") {
-                performSaveCanvas()
-                executePendingAction()
-            }
-            Button("Don't Save", role: .destructive) {
-                executePendingAction()
-            }
-            Button("Cancel", role: .cancel) {
-                pendingAction = nil
-            }
-        } message: {
-            Text("Do you want to save the changes to \"\(canvas.title)\" before switching?")
-        }
     }
     
-    // MARK: - Actions & Guards
+    // MARK: - Auto-Save & Actions
+    
+    private func autoSaveCurrentState() {
+        try? StorageManager.shared.saveCanvas(canvas: canvas, palette: palette)
+    }
     
     private func restoreLastSessionOrDefaults() {
         if let session = StorageManager.shared.loadLastSession() {
@@ -153,43 +139,6 @@ public struct MainView: View {
             if !session.palette.isEmpty {
                 palette.colors = session.palette.map { PaletteColor(hex: $0) }
             }
-            canvas.isModified = false
-        }
-    }
-    
-    private func checkUnsavedAndProceed(action: PendingAction) {
-        if canvas.isModified {
-            pendingAction = action
-            isUnsavedPromptPresented = true
-        } else {
-            pendingAction = action
-            executePendingAction()
-        }
-    }
-    
-    private func executePendingAction() {
-        guard let action = pendingAction else { return }
-        switch action {
-        case .createNew:
-            isNewCanvasSheetPresented = true
-        case .loadSaved(let data):
-            canvas.reset(width: data.width, height: data.height, title: data.title)
-            canvas.id = data.id
-            canvas.grid = data.grid
-            if !data.palette.isEmpty {
-                palette.colors = data.palette.map { PaletteColor(hex: $0) }
-            }
-            canvas.isModified = false
-            StorageManager.shared.saveLastSession(canvas: canvas, palette: palette)
-        }
-        pendingAction = nil
-    }
-    
-    private func performSaveCanvas() {
-        do {
-            try StorageManager.shared.saveCanvas(canvas: canvas, palette: palette)
-        } catch {
-            print("Failed to save canvas: \(error)")
         }
     }
     

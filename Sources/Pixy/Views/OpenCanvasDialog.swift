@@ -3,17 +3,28 @@ import SwiftUI
 public struct OpenCanvasDialog: View {
     @Environment(\.dismiss) private var dismiss
     
-    let savedCanvases: [SavedCanvasData]
     let onSelectCanvas: (SavedCanvasData) -> Void
     let onDeleteCanvas: (UUID) -> Void
     
+    @State private var savedCanvases: [SavedCanvasData] = []
     @State private var selectedId: UUID? = nil
     
-    public init(savedCanvases: [SavedCanvasData], onSelectCanvas: @escaping (SavedCanvasData) -> Void, onDeleteCanvas: @escaping (UUID) -> Void) {
-        self.savedCanvases = savedCanvases
+    @State private var canvasToDelete: SavedCanvasData? = nil
+    @State private var isDeleteConfirmationPresented: Bool = false
+    
+    public init(
+        onSelectCanvas: @escaping (SavedCanvasData) -> Void,
+        onDeleteCanvas: @escaping (UUID) -> Void
+    ) {
         self.onSelectCanvas = onSelectCanvas
         self.onDeleteCanvas = onDeleteCanvas
-        self._selectedId = State(initialValue: savedCanvases.first?.id)
+    }
+    
+    private func refreshList() {
+        savedCanvases = StorageManager.shared.listSavedCanvases()
+        if selectedId == nil || !savedCanvases.contains(where: { $0.id == selectedId }) {
+            selectedId = savedCanvases.first?.id
+        }
     }
     
     public var body: some View {
@@ -29,7 +40,7 @@ public struct OpenCanvasDialog: View {
                     Text("No saved canvases found.")
                         .foregroundColor(.secondary)
                 }
-                .frame(height: 180)
+                .frame(height: 220)
             } else {
                 List(selection: $selectedId) {
                     ForEach(savedCanvases) { item in
@@ -48,12 +59,14 @@ public struct OpenCanvasDialog: View {
                             }
                             Spacer()
                             Button(action: {
-                                onDeleteCanvas(item.id)
+                                canvasToDelete = item
+                                isDeleteConfirmationPresented = true
                             }) {
                                 Image(systemName: "trash")
-                                    .foregroundColor(.red.opacity(0.8))
+                                    .foregroundColor(.red.opacity(0.85))
                             }
                             .buttonStyle(.plain)
+                            .help("Delete canvas")
                         }
                         .padding(.vertical, 4)
                         .tag(item.id)
@@ -82,6 +95,20 @@ public struct OpenCanvasDialog: View {
             }
         }
         .padding()
-        .frame(width: 400)
+        .frame(width: 420)
+        .onAppear {
+            refreshList()
+        }
+        .alert("Delete Canvas", isPresented: $isDeleteConfirmationPresented, presenting: canvasToDelete) { item in
+            Button("Delete", role: .destructive) {
+                onDeleteCanvas(item.id)
+                refreshList()
+            }
+            Button("Cancel", role: .cancel) {
+                canvasToDelete = nil
+            }
+        } message: { item in
+            Text("Are you sure you want to delete \"\(item.title)\"? This action cannot be undone.")
+        }
     }
 }

@@ -4,6 +4,7 @@ import AppKit
 public struct CanvasView: View {
     @ObservedObject var canvas: CanvasModel
     @ObservedObject var palette: PaletteModel
+    let onEditEnded: (() -> Void)?
     
     @State private var dragStartPoint: (x: Int, y: Int)? = nil
     @State private var dragCurrentPoint: (x: Int, y: Int)? = nil
@@ -11,12 +12,12 @@ public struct CanvasView: View {
     @State private var zoomScale: CGFloat = 1.0
     @State private var pinchBaseScale: CGFloat = 1.0
     
-    public init(canvas: CanvasModel, palette: PaletteModel) {
+    public init(canvas: CanvasModel, palette: PaletteModel, onEditEnded: (() -> Void)? = nil) {
         self.canvas = canvas
         self.palette = palette
+        self.onEditEnded = onEditEnded
     }
     
-    // Calculates base cell size for display based on canvas size
     private var baseCellSize: CGFloat {
         let maxDimension = max(canvas.width, canvas.height)
         if maxDimension <= 16 { return 32 }
@@ -79,14 +80,11 @@ public struct CanvasView: View {
             // Canvas View Area with trackpad pinch gesture
             ScrollView([.horizontal, .vertical], showsIndicators: true) {
                 ZStack {
-                    // Transparent checkerboard background
                     CheckerboardView(width: canvas.width, height: canvas.height, cellSize: cellSize)
                     
-                    // SwiftUI Canvas for rendering cells & line preview
                     Canvas { context, size in
                         let activeColor = PaletteModel.hexToColor(palette.selectedHex)
                         
-                        // 1. Draw base cells
                         for y in 0..<canvas.height {
                             for x in 0..<canvas.width {
                                 let hex = canvas.grid[y][x]
@@ -103,7 +101,6 @@ public struct CanvasView: View {
                             }
                         }
                         
-                        // 2. Draw Line preview if drawing line
                         if canvas.currentTool == .line,
                            let start = dragStartPoint,
                            let current = dragCurrentPoint {
@@ -134,7 +131,6 @@ public struct CanvasView: View {
                             handleGestureEnded(location: value.location)
                         }
                 )
-                // Trackpad pinch-to-zoom gesture
                 .simultaneousGesture(
                     MagnificationGesture()
                         .onChanged { value in
@@ -200,11 +196,13 @@ public struct CanvasView: View {
             dragStartPoint = nil
             dragCurrentPoint = nil
             lastDrawnPoint = nil
+            onEditEnded?()
             
         case .line:
             if let start = dragStartPoint, let end = pt {
                 canvas.recordStateForUndo()
                 canvas.drawLine(from: start, to: end, colorHex: palette.selectedHex)
+                onEditEnded?()
             }
             dragStartPoint = nil
             dragCurrentPoint = nil
@@ -212,6 +210,7 @@ public struct CanvasView: View {
         case .fill:
             if let target = pt {
                 canvas.floodFill(startX: target.x, startY: target.y, colorHex: palette.selectedHex)
+                onEditEnded?()
             }
             dragStartPoint = nil
             dragCurrentPoint = nil
@@ -248,7 +247,6 @@ public struct CanvasView: View {
     }
 }
 
-// Background checkerboard pattern to indicate transparent pixels
 struct CheckerboardView: View {
     let width: Int
     let height: Int
